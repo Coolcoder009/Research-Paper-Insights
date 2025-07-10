@@ -1,216 +1,458 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, MessageSquare, Bot, User, FileText, Lightbulb } from 'lucide-react';
+
+import React, { useState, useRef, useEffect, ChangeEvent } from 'react';
+import axios from 'axios';
+import {
+  Send,
+  MessageSquare,
+  Bot,
+  User,
+  Paperclip,
+  Lightbulb,
+  Plus,
+  Pencil,
+  Check,
+  AlertCircle,
+} from 'lucide-react';
 import { ChatMessage } from '../types';
-import { mockPapers } from '../data/mockData';
+
+/* ── helpers ─────────────────────────────────────────────────────────── */
+
+interface ChatTab {
+  id: string;
+  label: string;
+  fromApi: boolean;
+  editing?: boolean;
+  locked?: boolean;        // ← turns off the pencil icon after 1st msg
+}
+
+type Msg = ChatMessage & {
+  attachment?: { name: string; url?: string };
+};
+
+const WELCOME: Msg = {
+  id: 'welcome',
+  type: 'assistant',
+  content:
+    "Hello! I'm your AI research assistant. Ask me anything about your papers.",
+  timestamp: new Date(),
+};
+
+const fetchApiTitles = async (): Promise<ChatTab[]> => {
+  const { data } = await axios.get(
+    'http://localhost:8000/api/v1/chatnames/chatnames',
+  );
+  return (data.response ?? []).map(
+    (t: string, i: number): ChatTab => ({
+      id: String(i + 1),
+      label: t,
+      fromApi: true,
+    }),
+  );
+};
+
+/* ── page ────────────────────────────────────────────────────────────── */
 
 const Chat: React.FC = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      type: 'assistant',
-      content: 'Hello! I\'m your AI research assistant. I can help you analyze research papers, extract insights, and answer questions about your uploaded documents. What would you like to know?',
-      timestamp: new Date()
-    }
-  ]);
-  const [inputValue, setInputValue] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  /* sidebar */
+  const [tabs, setTabs] = useState<ChatTab[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  /* conversation */
+  const [msgs, setMsgs] = useState<Msg[]>([WELCOME]);
+  const [input, setInput] = useState('');
+  const [typing, setTyping] = useState(false);
+
+  /* naming-modal */
+  const [showModal, setShowModal] = useState(false);
+  const pending = useRef<() => void>(() => {});
+
+  /* fetch titles */
+  useEffect(() => void fetchApiTitles().then(setTabs), []);
+
+  /* scroll chat */
+  const logRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });
+  }, [msgs, typing]);
+
+  /* sidebar helpers */
+  const newChat = () => {
+    const id = `local-${Date.now()}`;
+    setTabs((t) => [{ id, label: 'Untitled', fromApi: false }, ...t]);
+    setActiveId(id);
+    setMsgs([WELCOME]);
+  };
+  const openTab = (id: string) => {
+    setActiveId(id);
+    setMsgs([WELCOME]);
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isTyping]);
+  /* rename helpers */
+  const toggleEdit = (id: string) =>
+    setTabs((t) =>
+      t.map((tab) => (tab.id === id ? { ...tab, editing: !tab.editing } : tab)),
+    );
+  const rename = (id: string, title: string) =>
+    setTabs((t) =>
+      t.map((tab) =>
+        tab.id === id ? { ...tab, label: title.trim() || 'Untitled', editing: false } : tab,
+      ),
+    );
 
-  const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
+  /* guard — if active chat is still Untitled and unlocked */
+  const needName = () => {
+    const tab = tabs.find((t) => t.id === activeId);
+    return tab && tab.label === 'Untitled' && !tab.locked;
+  };
 
-    const userMessage: ChatMessage = {
+  /* mark tab locked (no more pencil) */
+  const lockTab = () =>
+    setTabs((t) =>
+      t.map((tab) =>
+        tab.id === activeId ? { ...tab, locked: true } : tab,
+      ),
+    );
+
+  /* SEND TEXT */
+  const reallySend = (content: string) => {
+    if (!content.trim()) return;
+    const user: Msg = {
       id: Date.now().toString(),
       type: 'user',
-      content: inputValue,
-      timestamp: new Date()
+      content,
+      timestamp: new Date(),
+    };
+    setMsgs((m) => [...m, user]);
+    setTyping(true);
+    setTimeout(() => {
+      setMsgs((m) => [
+        ...m,
+        {
+          id: (Date.now() + 1).toString(),
+          type: 'assistant',
+          content: `“${content}” – (mock reply)`,
+          timestamp: new Date(),
+        },
+      ]);
+      setTyping(false);
+    }, 1000);
+  };
+
+  const send = () => {
+    const action = () => {
+      lockTab();
+      reallySend(input);
+      setInput('');
+    };
+    if (needName()) {
+      pending.current = action;
+      setShowModal(true);
+    } else {
+      action();
+    }
+  };
+
+  /* FILE UPLOAD */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleFileBtn = () => fileInputRef.current?.click();
+
+  const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const doUpload = () => {
+      lockTab();
+      setMsgs((m) => [
+        ...m,
+        {
+          id: Date.now().toString(),
+          type: 'user',
+          content: '',
+          timestamp: new Date(),
+          attachment: { name: file.name },
+        },
+      ]);
+      // TODO: real upload
     };
 
-    setMessages(prev => [...prev, userMessage]);
-    setInputValue('');
-    setIsTyping(true);
-
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse = generateAIResponse(inputValue);
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: aiResponse,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, assistantMessage]);
-      setIsTyping(false);
-    }, 1500);
+    if (needName()) {
+      pending.current = doUpload;
+      setShowModal(true);
+    } else {
+      doUpload();
+    }
+    e.target.value = '';
   };
 
-  const generateAIResponse = (query: string): string => {
-    const queryLower = query.toLowerCase();
-    
-    if (queryLower.includes('methodology') || queryLower.includes('method')) {
-      return 'Based on the papers in your collection, I can see several key methodologies being used:\n\n• **Randomized Controlled Trials (RCTs)** - Most common in clinical studies like the CRISPR gene editing research\n• **Meta-analysis** - Used extensively in the neuroimaging machine learning study\n• **Systematic Reviews** - Particularly in the climate change and pollinator diversity research\n\nWould you like me to dive deeper into any specific methodology or help you compare methodological approaches across different studies?';
-    }
-    
-    if (queryLower.includes('finding') || queryLower.includes('result')) {
-      return 'Here are some of the most significant findings from your recent papers:\n\n🧠 **Neuroimaging & AI**: Deep learning models achieved 89.3% accuracy in brain tumor classification, with CNNs outperforming traditional ML by 12.7%\n\n🧬 **Gene Therapy**: CRISPR-Cas9 showed 23% reduction in motor symptoms with 78% of patients showing clinical improvement\n\n🌍 **Climate Impact**: 34% decline in pollinator species richness per 1°C temperature increase, with Mediterranean ecosystems most vulnerable\n\nWhich finding would you like me to analyze further or compare with related research?';
-    }
-    
-    if (queryLower.includes('limitation') || queryLower.includes('weakness')) {
-      return 'I\'ve identified several common limitations across your research collection:\n\n⚠️ **Sample Size Issues**: Many studies have limited sample sizes or lack diversity in populations\n⚠️ **Follow-up Periods**: Short-term studies (like the 12-month CRISPR trial) need longer observation periods\n⚠️ **Geographic Bias**: Research tends to focus on temperate regions, missing tropical/Arctic data\n⚠️ **Methodological Heterogeneity**: Inconsistent protocols make cross-study comparisons difficult\n\nThese limitations often represent opportunities for future replication studies. Would you like suggestions for addressing any specific limitation?';
-    }
-    
-    if (queryLower.includes('replication') || queryLower.includes('future')) {
-      return 'Based on the identified limitations, here are my top replication study suggestions:\n\n🔬 **Extended CRISPR Trials**: Conduct 5+ year follow-up studies to assess long-term safety and efficacy\n\n🌐 **Global Pollinator Studies**: Replicate climate impact research in tropical and Arctic regions with standardized protocols\n\n🧠 **Multi-center AI Validation**: Implement neuroimaging AI models across diverse medical centers with varied equipment\n\n⚖️ **Quantum Computing Benchmarks**: Develop standardized benchmarks for quantum drug discovery applications\n\nWould you like me to help design a specific replication study protocol for any of these areas?';
-    }
-    
-    if (queryLower.includes('collaboration') || queryLower.includes('partner')) {
-      return 'I\'ve identified 89 potential collaboration opportunities based on your research interests:\n\n🤝 **Complementary Expertise**: Researchers working on related problems with different methodological approaches\n🌍 **Geographic Expansion**: International collaborators who could help address geographic bias in studies\n💡 **Interdisciplinary Connections**: Opportunities to bridge different research domains (e.g., AI + Biology)\n📊 **Resource Sharing**: Labs with complementary equipment or data sets\n\nWould you like me to suggest specific collaboration opportunities based on your research focus?';
-    }
-    
-    return 'I can help you with various aspects of research analysis:\n\n• **Paper Analysis**: Extract key insights, methodologies, and findings\n• **Comparative Studies**: Compare approaches across different papers\n• **Research Gaps**: Identify opportunities for new research\n• **Collaboration**: Find potential research partners\n• **Replication Ideas**: Suggest follow-up studies\n\nTry asking me about specific aspects like "What are the main findings?" or "Show me the limitations" or "Suggest replication studies."';
-  };
+  const activeTab = tabs.find((t) => t.id === activeId);
 
-  const quickQuestions = [
-    'What are the key findings across all papers?',
-    'Show me common limitations in the studies',
-    'Suggest potential replication studies',
-    'What methodologies are most commonly used?'
-  ];
-
+  /* ── UI ────────────────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <div className="max-w-4xl mx-auto w-full flex flex-col h-screen">
-        {/* Header */}
-        <div className="bg-white shadow-sm border-b border-gray-200 p-6">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-gradient-to-r from-blue-600 to-violet-600 rounded-lg">
-              <MessageSquare className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">AI Research Assistant</h1>
-              <p className="text-gray-600">Ask questions about your research papers and get intelligent insights</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div className={`flex space-x-3 max-w-3xl ${message.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  message.type === 'user' 
-                    ? 'bg-blue-600' 
-                    : 'bg-gradient-to-r from-violet-600 to-purple-600'
-                }`}>
-                  {message.type === 'user' ? (
-                    <User className="h-4 w-4 text-white" />
-                  ) : (
-                    <Bot className="h-4 w-4 text-white" />
-                  )}
-                </div>
-                <div className={`rounded-2xl p-4 ${
-                  message.type === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white border border-gray-200 text-gray-900'
-                }`}>
-                  <div className="whitespace-pre-wrap">{message.content}</div>
-                  <div className={`text-xs mt-2 ${
-                    message.type === 'user' ? 'text-blue-100' : 'text-gray-500'
-                  }`}>
-                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {isTyping && (
-            <div className="flex justify-start">
-              <div className="flex space-x-3 max-w-3xl">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-violet-600 to-purple-600 flex items-center justify-center flex-shrink-0">
-                  <Bot className="h-4 w-4 text-white" />
-                </div>
-                <div className="bg-white border border-gray-200 rounded-2xl p-4">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Quick Questions */}
-        {messages.length === 1 && (
-          <div className="px-6 pb-4">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center space-x-2">
-                <Lightbulb className="h-4 w-4 text-yellow-600" />
-                <span>Quick Questions</span>
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {quickQuestions.map((question) => (
-                  <button
-                    key={question}
-                    onClick={() => setInputValue(question)}
-                    className="text-left p-3 text-sm text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-                  >
-                    {question}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Input */}
-        <div className="bg-white border-t border-gray-200 p-6">
-          <div className="flex space-x-4">
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder="Ask about your research papers..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 pr-12"
-                disabled={isTyping}
-              />
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                <FileText className="h-5 w-5 text-gray-400" />
-              </div>
-            </div>
+    <>
+      {/* ░░ MAIN LAYOUT ░░ */}
+      <div className="min-h-screen flex bg-gray-50">
+        {/* sidebar */}
+        <aside className="w-80 bg-white border-r border-gray-200 flex flex-col h-screen">
+          <div className="flex items-center justify-between p-5 border-b">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-blue-600" /> Chats
+            </h2>
             <button
-              onClick={handleSendMessage}
-              disabled={!inputValue.trim() || isTyping}
-              className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200 flex items-center space-x-2"
+              onClick={newChat}
+              className="p-2 rounded-lg hover:bg-gray-100"
             >
-              <Send className="h-4 w-4" />
-              <span>Send</span>
+              <Plus className="h-4 w-4 text-gray-600" />
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-2 text-center">
-            AI responses are based on your uploaded research papers and may not reflect the latest research.
-          </p>
-        </div>
+          <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-3">
+            {tabs.map((tab) => (
+              <SidebarCard
+                key={tab.id}
+                tab={tab}
+                active={activeId === tab.id}
+                onClick={() => openTab(tab.id)}
+                onToggleEdit={() => toggleEdit(tab.id)}
+                onSave={(title) => rename(tab.id, title)}
+              />
+            ))}
+          </div>
+        </aside>
+
+        {/* main */}
+        <main className="flex-1 flex flex-col h-screen">
+          <header className="bg-white border-b p-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-r from-blue-600 to-violet-600 rounded-lg">
+                <MessageSquare className="h-6 w-6 text-white" />
+              </div>
+              <h1 className="text-2xl font-bold">{activeTab?.label ?? 'AI Assistant'}</h1>
+            </div>
+            {activeTab?.label === 'Untitled' && !activeTab?.locked && (
+              <p className="mt-3 text-sm text-yellow-600">
+                Create a chat name to save your chats.
+              </p>
+            )}
+          </header>
+
+          <div ref={logRef} className="flex-1 overflow-y-auto px-6 space-y-6 pb-40">
+            {msgs.map((m) =>
+              m.attachment ? <AttachmentBubble key={m.id} m={m} /> : <TextBubble key={m.id} m={m} />,
+            )}
+            {typing && <TypingBubble />}
+          </div>
+
+          <div className="sticky bottom-0 bg-white border-t p-6">
+            <div className="flex gap-4">
+              <div className="relative flex-1">
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && send()}
+                  placeholder="Ask about your research papers…"
+                  className="w-full px-4 py-3 border rounded-xl pr-12"
+                />
+                <button
+                  onClick={handleFileBtn}
+                  className="absolute right-10 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <Paperclip className="h-5 w-5" />
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  hidden
+                  onChange={handleFile}
+                />
+              </div>
+              <button
+                onClick={send}
+                disabled={!input.trim()}
+                className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-gray-300 flex items-center gap-2"
+              >
+                <Send className="h-4 w-4" />
+                Send
+              </button>
+            </div>
+          </div>
+        </main>
       </div>
+
+      {/* ░░ modal ░░ */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-xl p-6 space-y-4 shadow-lg">
+            <div className="flex items-center gap-2 text-yellow-600">
+              <AlertCircle className="h-5 w-5" />
+              <h2 className="font-semibold">Unsaved chat</h2>
+            </div>
+            <p className="text-sm text-gray-700">
+              This chat is still <strong>Untitled</strong>. If you continue,
+              your conversation won’t be saved.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  // start rename mode
+                  toggleEdit(activeId!);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Create chat name
+              </button>
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  pending.current();
+                }}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+/* ── small components ────────────────────────────────────────────────── */
+
+const SidebarCard: React.FC<{
+  tab: ChatTab;
+  active: boolean;
+  onClick: () => void;
+  onToggleEdit: () => void;
+  onSave: (t: string) => void;
+}> = ({ tab, active, onClick, onToggleEdit, onSave }) => {
+  const [draft, setDraft] = useState(tab.label);
+  const commit = () => onSave(draft || 'Untitled');
+
+  const editable = !tab.locked;
+
+  return (
+    <div
+      className={`relative rounded-2xl shadow-sm ${
+        active ? 'bg-gradient-to-r from-blue-600 to-violet-600 text-white' : 'bg-gray-50'
+      }`}
+    >
+      {tab.editing ? (
+        <>
+          <input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => e.key === 'Enter' && commit()}
+            className="w-full bg-transparent px-4 py-3 rounded-2xl outline-none"
+          />
+          <button
+            onClick={commit}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/20 rounded-full"
+          >
+            <Check className="h-4 w-4 text-white" />
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={onClick}
+          className="w-full flex items-center gap-3 px-4 py-3 truncate rounded-2xl hover:bg-gray-100/50"
+        >
+          <MessageSquare
+            className={`h-4 w-4 ${active ? 'text-white' : 'text-blue-600'}`}
+          />
+          <span className="flex-1 truncate">{tab.label}</span>
+          {editable && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleEdit();
+              }}
+              className="p-1 rounded-full hover:bg-white/20"
+            >
+              <Pencil
+                className={`h-3 w-3 ${active ? 'text-white' : 'text-gray-500'}`}
+              />
+            </button>
+          )}
+        </button>
+      )}
     </div>
   );
 };
+
+const Avatar: React.FC<{ who: 'user' | 'assistant' }> = ({ who }) => (
+  <div
+    className={`w-8 h-8 rounded-full grid place-items-center ${
+      who === 'user'
+        ? 'bg-blue-600'
+        : 'bg-gradient-to-r from-violet-600 to-purple-600'
+    }`}
+  >
+    {who === 'user' ? (
+      <User className="h-4 w-4 text-white" />
+    ) : (
+      <Bot className="h-4 w-4 text-white" />
+    )}
+  </div>
+);
+
+const Timestamp = ({ when, dark }: { when: Date; dark?: boolean }) => (
+  <div className={`text-xs mt-2 ${dark ? 'text-blue-100' : 'text-gray-500'}`}>
+    {when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+  </div>
+);
+
+const TextBubble: React.FC<{ m: Msg }> = ({ m }) => (
+  <div className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+    <div
+      className={`flex max-w-3xl space-x-3 ${
+        m.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+      }`}
+    >
+      <Avatar who={m.type} />
+      <div
+        className={`p-4 rounded-2xl whitespace-pre-wrap ${
+          m.type === 'user' ? 'bg-blue-600 text-white' : 'bg-white border'
+        }`}
+      >
+        {m.content}
+        <Timestamp when={m.timestamp} dark={m.type === 'user'} />
+      </div>
+    </div>
+  </div>
+);
+
+const AttachmentBubble: React.FC<{ m: Msg }> = ({ m }) => (
+  <div className="flex justify-end">
+    <div className="flex max-w-3xl flex-row-reverse space-x-reverse space-x-3">
+      <Avatar who="user" />
+      <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-800">
+        📎 {m.attachment?.name}
+        <Timestamp when={m.timestamp} />
+      </div>
+    </div>
+  </div>
+);
+
+const TypingBubble = () => (
+  <div className="flex justify-start">
+    <div className="flex space-x-3 max-w-3xl">
+      <Avatar who="assistant" />
+      <div className="bg-white border rounded-2xl p-4">
+        <div className="flex space-x-1">
+          {[0, 0.1, 0.2].map((d) => (
+            <div
+              key={d}
+              className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+              style={{ animationDelay: `${d}s` }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 export default Chat;

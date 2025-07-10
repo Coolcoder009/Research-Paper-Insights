@@ -1,21 +1,24 @@
 export interface Paper {
-  id: string;
-  title: string;
-  authors: string[];
-  journal: string;
-  publishedDate: string;
-  doi: string;
-  abstract: string;
-  methodology: string[];
-  findings: string[];
-  limitations: string[];
-  domain: string;
-  sampleSize: number;
-  keywords: string[];
-  replicationSuggestions: string[];
-  citationCount: number;
-  pdfUrl?: string;
+  // BASIC
+  title?: string;
+  authors?: string[];             // split by comma on ingest
+  publishedDate?: string;         // ISO string
+  journal?: string;
+  doi?: string;
+  domain?: string;
+
+  // METRICS
+  citationCount?: number;
+
+  // CONTENT
+  abstract?: string;
+  findings?: string[];
+  methodology?: string[];
+  keywords?: string[];
+  limitations?: string[];
+  replicationSuggestions?: string[];
 }
+
 
 export interface SearchFilters {
   keywords: string;
