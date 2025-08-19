@@ -7,7 +7,7 @@ from app.services.llm_router import response_gemini
 def process(file, chatname):
     extracted_contents, type = filetype(file)
     embeddings(chatname, extracted_contents)
-    return {"Done!"}
+    return type
 
 def response(query, chatname):
     retrieve_content = retrieve_chunks(chatname, query)

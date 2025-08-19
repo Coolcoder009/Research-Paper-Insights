@@ -46,7 +46,8 @@ Here is the research paper content:
 """
 '''
 
-TEMP_RESPONSE_PROMPT = '''
+
+CHATBOT_RESPONSE_PROMPT = '''
 You are a helpful assistant. Use the following context to answer the user's question.
 
 Context:

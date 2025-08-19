@@ -1,1 +1,16 @@
 venv/
+migrations/
+faiss_temp/
+alembic.ini
+Steps_alembic
+.env
+Responses needed.txt
+backend/.idea/
+backend/app/__pycache__/
+backend/app/api/v1/__pycache__/
+backend/app/services/__pycache__/
+backend/app/utils/__pycache__/
+backend/sql/__pycache__/
+backend/sql/crud/__pycache__/
+backend/sql/models/__pycache__/
+backend/list_collections.py

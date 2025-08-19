@@ -1,9 +1,16 @@
-from sqlalchemy.orm import Session
-from sql.models.chat import PaperChatHistory
+# sql/crud/upload_chat.py
 
-def store_chat(db: Session, chat: PaperChatHistory):
-    db_chat = PaperChatHistory(**chat.dict())
-    db.add(db_chat)
-    db.commit()
-    db.refresh(db_chat)
-    return db_chat
+from sql.database import SessionLocal
+from sql.models.chat import PaperChatHistory
+from datetime import datetime
+
+def store_chat(**chat_data):
+    db = SessionLocal()
+    try:
+        chat_data.setdefault("created_at", datetime.utcnow())
+        db_chat = PaperChatHistory(**chat_data)
+        db.add(db_chat)
+        db.commit()
+        db.refresh(db_chat)
+    finally:
+        db.close()

@@ -1,7 +1,7 @@
 import os
 import faiss
 from app.services.embedder import embedding_pipeline
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
 

@@ -11,4 +11,3 @@ def store_report(paper: dict):
         db.refresh(db_paper)
     finally:
         db.close()
-

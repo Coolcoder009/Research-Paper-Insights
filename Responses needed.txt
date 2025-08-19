@@ -1,0 +1,22 @@
+Home -> return papers count, Domains, users, Insights generated
+
+Upload pdfs -> Extract content -> return 1.Paper name 2.Author names 3.Date published 4.citations 5.Journal 6.DOI num 7.Domain 8.keywords 9.Abstract 10.Methodology 11.Key findings
+								 12. Study limitations 13.Replication suggestions 14. Analyze with AI -> Moves to Ask AI -> Find whether already in ask Ai this doc is uploaded ->
+								 if so move to that page if not new screen -> new chats can happen 
+
+Pdfs url -> Same flow...
+
+Explore Research Database -> return 1.Paper name 2.Author names 3.Date published 4.citations 5.Journal 6.DOI num 7.Domain 8.keywords 9.Abstract 10.Methodology 11.Key findings
+								 12. Study limitations 13.Replication suggestions 14. Analyze with AI -> Moves to Ask AI -> Find whether already in ask Ai this doc is uploaded ->
+								 if so move to that page if not new screen -> new chats can happen 
+								 
+Upload btn/Upload in navbar -> Upload input & Links input page.. also fetch recent uploads limit 3 along with time uploaded.. onclick the paper name return  return 1.Paper name 2.Author names 3.Date published 4.citations 5.Journal 6.DOI num 7.Domain 8.keywords 9.Abstract 10.Methodology 11.Key findings
+								 12. Study limitations 13.Replication suggestions 14. Analyze with AI -> Moves to Ask AI -> Find whether already in ask Ai this doc is uploaded ->
+								 if so move to that page if not new screen -> new chats can happen
+								 
+Dashboard -> return 1.Total papers count 2.Total domains 3.Avg file size(pages) 4.Total Journals 5.Domain distribution(All domains with count) 6.Recent key findings 
+			7.Trending research topics (use anything to get this limit 5) 8.Recent analyzed papers (last 3 paper names, author names, domains, upload date, domains) 
+			
+Ask AI -> return paper names which populate at right side.. onclick them their respective chats done must be shown
+
+Upload in direct chatbot -> get paper name, save chats based on timestamps
